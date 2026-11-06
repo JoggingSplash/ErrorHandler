@@ -19,35 +19,43 @@ declare(strict_types=1);
 
 namespace pocketmine\errorhandler;
 
+use Closure;
+use ErrorException;
+use LogicException;
 use function error_reporting;
 use function restore_error_handler;
 use function set_error_handler;
 use const E_NOTICE;
 use const E_WARNING;
 
-final class ErrorToExceptionHandler{
-	private function __construct(){
+/**
+ * PHPStorm cries if we use {@phpstan-template}
+ * and it seems php-stan likes it
+ * @template TReturn
+ */
+final class ErrorToExceptionHandler {
 
+	private function __construct(){
+		// NOOP
 	}
 
-	/** @var ErrorRecord|null */
-	private static $lastSilencedError = null;
+	private static ?ErrorRecord $lastSilencedError = null;
 
 	/**
-	 * @throws \ErrorException
+	 * @throws ErrorException
 	 */
 	public static function handle(int $severity, string $message, string $file, int $line) : bool{
 		if((error_reporting() & $severity) !== 0){
-			throw new \ErrorException($message, 0, $severity, $file, $line);
+			throw new ErrorException($message, 0, $severity, $file, $line);
 		}
 
 		self::$lastSilencedError = new ErrorRecord($severity, $message, $file, $line);
-		return true; //stfu operator
+		return true;
 	}
 
 	public static function getLastSilencedError() : ErrorRecord{
 		if(self::$lastSilencedError === null){
-			throw new \LogicException("No error has been generated");
+			throw new LogicException("No error has been generated");
 		}
 		return self::$lastSilencedError;
 	}
@@ -58,9 +66,11 @@ final class ErrorToExceptionHandler{
 
 	/** @phpstan-impure */
 	public static function getAndClearLastSilencedError() : ErrorRecord{
-		$result = self::getLastSilencedError();
-		self::clearLastSilencedError();
-		return $result;
+		try {
+			return self::getLastSilencedError();
+		} finally {
+			self::clearLastSilencedError();
+		}
 	}
 
 	/**
@@ -75,11 +85,11 @@ final class ErrorToExceptionHandler{
 	 * Used for trap() and trapAndRemoveFalse() to prevent @ operator or error_reporting() from interfering with
 	 * exception throws.
 	 *
-	 * @phpstan-return \Closure(int, string, string, int) : bool
+	 * @phpstan-return Closure(int, string, string, int) : bool
 	 */
-	private static function throwAll() : \Closure{
-		return function(int $severity, string $message, string $file, int $line): bool{
-			throw new \ErrorException($message, 0, $severity, $file, $line);
+	private static function throwAll() : Closure{
+		return static function(int $severity, string $message, string $file, int $line): bool{
+			throw new ErrorException($message, 0, $severity, $file, $line);
 		};
 	}
 
@@ -87,13 +97,11 @@ final class ErrorToExceptionHandler{
 	 * Runs the given closure, and converts any E_WARNING or E_NOTICE it triggers to ErrorException, bypassing silence
 	 * operators or existing error handlers.
 	 *
-	 * @phpstan-template TReturn
-	 * @phpstan-param \Closure() : TReturn $closure
+	 * @param Closure() : TReturn $closure
 	 *
-	 * @phpstan-return TReturn
-	 * @throws \ErrorException
+	 * @return TReturn
 	 */
-	public static function trap(\Closure $closure, int $levels = E_WARNING | E_NOTICE){
+	public static function trap(Closure $closure, int $levels = E_WARNING | E_NOTICE){
 		set_error_handler(self::throwAll(), $levels);
 		try{
 			return $closure();
@@ -103,21 +111,39 @@ final class ErrorToExceptionHandler{
 	}
 
 	/**
+	 *  Runs the given closure, it does not trigger to ErrorException, instead, it
+	 *  returns False
+	 *
+	 * @param Closure $closure
+	 * @param int $levels
+	 * @return TReturn|false
+	 */
+	public static function silence(Closure $closure, int $levels = E_WARNING | E_NOTICE){
+		set_error_handler(self::throwAll(), $levels);
+		try {
+			return $closure();
+		}catch(ErrorException){
+			return false;
+		}finally{
+			restore_error_handler();
+		}
+	}
+
+	/**
 	 * Same as trap(), but removes false from the set of possible return values. Mainly useful for PHPStan to unfalsify
 	 * the results of stdlib functions that normally return false when emitting warnings.
 	 *
-	 * @phpstan-template TReturn
-	 * @phpstan-param \Closure() : (TReturn|false) $closure
+	 * @param Closure(): (TReturn|false) $closure
 	 *
 	 * @phpstan-return TReturn
-	 * @throws \ErrorException
+	 * @throws LogicException
 	 */
-	public static function trapAndRemoveFalse(\Closure $closure, int $levels = E_WARNING | E_NOTICE){
+	public static function trapAndRemoveFalse(Closure $closure, int $levels = E_WARNING | E_NOTICE){
 		set_error_handler(self::throwAll(), $levels);
 		try{
 			$result = $closure();
 			if($result === false){
-				throw new \LogicException("Block must not return false when no error occurred. Use trap() if the block may return false.");
+				throw new LogicException("Block must not return false when no error occurred. Use trap() if the block may return false.");
 			}
 			return $result;
 		}finally{

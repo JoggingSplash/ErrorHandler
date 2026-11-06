@@ -4,22 +4,15 @@ declare(strict_types=1);
 
 namespace pocketmine\errorhandler;
 
-final class ErrorRecord{
+readonly final class ErrorRecord{
 
-	/** @var int */
-	private $severity;
-	/** @var string */
-	private $message;
-	/** @var string */
-	private $file;
-	/** @var int */
-	private $line;
+	public function __construct(
+		public int $severity,
+		public string $message,
+		public string $file,
+		public int $line
+	){
 
-	public function __construct(int $severity, string $message, string $file, int $line){
-		$this->severity = $severity;
-		$this->message = $message;
-		$this->file = $file;
-		$this->line = $line;
 	}
 
 	public function getSeverity() : int{

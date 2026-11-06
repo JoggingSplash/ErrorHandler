@@ -37,7 +37,7 @@ class ErrorToExceptionHandlerTest extends TestCase{
 		$this->expectException(\ErrorException::class);
 		@ErrorToExceptionHandler::trap(fn() => file_get_contents('/i dont exist'));
 	}
-
+	
 	/**
 	 * error_reporting() must also not interfere with trap().
 	 */
@@ -45,5 +45,18 @@ class ErrorToExceptionHandlerTest extends TestCase{
 		$this->expectException(\ErrorException::class);
 		error_reporting(0);
 		ErrorToExceptionHandler::trap(fn() => file_get_contents('/i dont exist'));
+	}
+
+	/**
+	 * test ErrorToExceptionHandler::silence()
+	 */
+	public function testErrorToSilence(): void {
+		try {
+			$this->assertFalse(
+				ErrorToExceptionHandler::silence(fn() => file_get_contents('/i dont exist'))
+			);
+		}catch (\Throwable $e){
+			$this->fail("ErrorToExceptionHandler::silence() should return TReturn|false, but " . get_class($e) . " was thrown");
+		}
 	}
 }
